@@ -1,7 +1,7 @@
 import com.github.thoebert.krosbridge.fromDuration
 import com.github.thoebert.krosbridge.fromInstant
-import com.github.thoebert.krosbridge.messages.primitive.Duration
-import com.github.thoebert.krosbridge.messages.primitive.Time
+import com.github.thoebert.krosbridge.messages.primitive.msg.Duration
+import com.github.thoebert.krosbridge.messages.primitive.msg.Time
 import com.github.thoebert.krosbridge.toDuration
 import com.github.thoebert.krosbridge.toInstant
 import kotlinx.datetime.toKotlinInstant

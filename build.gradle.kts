@@ -1,9 +1,7 @@
 import com.github.thoebert.krosbridgecodegen.KROSBridgeCodegenPluginConfig
-import org.jetbrains.kotlin.gradle.targets.js.dsl.ExperimentalWasmDsl
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    //kotlin("jvm") version "1.9.0"
     alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.androidLibrary)
 
@@ -86,8 +84,8 @@ kotlin {
             kotlin.srcDirs("${buildDir}/generated/source/ros")
             dependencies {
                 implementation(libs.napier)
-                implementation("com.ashampoo:kim:0.15.1")
-                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0-RC.2")
+                implementation(libs.kim)
+                implementation(libs.kotlinx.datetime)
                 implementation(libs.ktor.client)
                 implementation(libs.ktor.client.logging)
                 implementation(libs.ktor.client.content.neogation)
@@ -112,9 +110,6 @@ kotlin {
 }
 
 
-// tasks.named("build") { dependsOn("generateROSSources") }
-
-
 configure<KROSBridgeCodegenPluginConfig> {
     packageName.set("com.github.thoebert.krosbridge.messages")
 }
@@ -127,7 +122,6 @@ publishing {
             groupId = group.toString()
             artifactId = project.name
             version = version
-            // from(components["java"])
         }
     }
 }

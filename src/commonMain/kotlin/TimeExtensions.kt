@@ -1,7 +1,7 @@
 package com.github.thoebert.krosbridge
 
-import com.github.thoebert.krosbridge.messages.primitive.Duration
-import com.github.thoebert.krosbridge.messages.primitive.Time
+import com.github.thoebert.krosbridge.messages.primitive.msg.Duration
+import com.github.thoebert.krosbridge.messages.primitive.msg.Time
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlin.time.Duration.Companion.nanoseconds
