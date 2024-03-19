@@ -1,6 +1,11 @@
 package com.github.thoebert.krosbridge
 
 import com.github.thoebert.krosbridge.rosmessages.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import kotlin.reflect.KClass
 
 typealias ServiceRequestSubscriber = (ServiceRequest?, String?) -> Unit
@@ -55,6 +60,7 @@ open class Service(
         ros.send(CallService(name, callServceId, request, type))
     }
 
+
     internal fun receivedResponse(response: ServiceResponse?, result : Boolean, id : String?) {
         responseSubscribers[id]?.let { it(response, result, id) }
         ros.deregisterService(this)
@@ -108,11 +114,13 @@ open class Service(
      * @return The corresponding service response from ROS.
      */
     suspend fun callService(request: ServiceRequest): Pair<ServiceResponse?, Boolean> {
-        return TODO("implement in kmp") /*suspendCoroutine { continuation ->
-            callService(request) { response, result, _ ->
-                continuation.resume(response to result)
+        return suspendCoroutine { continuation ->
+            CoroutineScope(Dispatchers.Default).launch {
+                callService(request) { response, result, _ ->
+                    continuation.resume(response to result)
+                }
             }
-        }*/
+        }
     }
 
 }

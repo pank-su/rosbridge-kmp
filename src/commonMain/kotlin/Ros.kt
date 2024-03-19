@@ -3,6 +3,7 @@ package com.github.thoebert.krosbridge
 import com.github.thoebert.krosbridge.rosmessages.*
 import io.github.aakira.napier.Napier
 import io.ktor.client.*
+import io.ktor.client.plugins.api.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.http.*
 import io.ktor.utils.io.charsets.*
@@ -47,6 +48,8 @@ class Ros(
 
     // keeps track of callback functions for a given service request
     private val serviceNames: MutableMap<String, Service> = HashMap()
+
+    private val actionNames: MutableMap<String, Action> = HashMap()
 
 
     private val logger = Napier
@@ -160,6 +163,16 @@ class Ros(
         }
     }
 
+    fun actionByName(actionName: String): Action? {
+        val action = actionNames[actionName]
+        return if (action != null) {
+            action
+        } else {
+            logger.e("Invalid service name $action")
+            null
+        }
+    }
+
 
     abstract class GuidedSerializer<T : Any>(baseClass: KClass<T>) : JsonContentPolymorphicSerializer<T>(baseClass) {
 
@@ -171,6 +184,10 @@ class Ros(
         }
     }
 
+    object ActionSendGoalSerializer : GuidedSerializer<ActionGoal>(ActionGoal::class)
+    object ActionFeedbackSerializer : GuidedSerializer<ActionFeedback>(ActionFeedback::class)
+
+    object ActionResultSerializer : GuidedSerializer<ActionResult>(ActionResult::class)
     object ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
     object ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
     object MessageSerializer : GuidedSerializer<Message>(Message::class)
@@ -202,6 +219,30 @@ class Ros(
                     }
                 }
             }
+
+            FeedbackAction.OPERATION -> {
+                getField(content, "action")?.let { actionName ->
+                    actionByName(actionName)?.let {
+                        ActionFeedbackSerializer.serializer = it.feedbackClz.serializer()
+                    }
+                }
+            }
+
+            ResultAction.OPERATION -> {
+                getField(content, "action")?.let { actionName ->
+                    actionByName(actionName)?.let {
+                        ActionResultSerializer.serializer = it.resultClz.serializer()
+                    }
+                }
+            }
+
+            SendActionGoal.OPERATION -> {
+                getField(content, "action")?.let { actionName ->
+                    actionByName(actionName)?.let {
+                        ActionSendGoalSerializer.serializer = it.goalClz.serializer()
+                    }
+                }
+            }
         }
         return when (op) {
             Advertise.OPERATION -> Advertise.serializer()
@@ -216,6 +257,11 @@ class Ros(
             Unadvertise.OPERATION -> Unadvertise.serializer()
             UnadvertiseService.OPERATION -> UnadvertiseService.serializer()
             Unsubscribe.OPERATION -> Unsubscribe.serializer()
+            AdvertiseAction.OPERATION -> AdvertiseAction.serializer()
+            FeedbackAction.OPERATION -> FeedbackAction.serializer()
+            ResultAction.OPERATION -> ResultAction.serializer()
+            SendActionGoal.OPERATION -> SendActionGoal.serializer()
+            UnadvertiseAction.OPERATION -> UnadvertiseAction.serializer()
             else -> throw IllegalArgumentException("Coult not find op named $op")
         }
     }
@@ -293,6 +339,15 @@ class Ros(
 
             is CallService ->
                 serviceByName(rosmsg.service)?.let { it.receivedRequest(rosmsg.args, rosmsg.id) }
+
+            is FeedbackAction ->
+                actionByName(rosmsg.action)?.let { it.receivedFeedback(rosmsg.values, rosmsg.id) }
+
+            is ResultAction ->
+                actionByName(rosmsg.action)?.let { it.receivedResult(rosmsg.values, rosmsg.result, rosmsg.id) }
+
+            is SendActionGoal ->
+                actionByName(rosmsg.action)?.let { it.receivedGoal(rosmsg.args, rosmsg.feedback, rosmsg.id) }
 
             else ->
                 logger.e("Unrecognized op code: $rosmsg")
@@ -406,6 +461,15 @@ class Ros(
      */
     fun deregisterService(service: Service) {
         serviceNames.remove(service.name) // remove the callback
+    }
+
+    fun registerAction(action: Action) {
+        if (action.name in actionNames) throw IllegalArgumentException("Duplicate Action registration: ${action.name}")
+        actionNames[action.name] = action
+    }
+
+    fun deregisterAction(action: Action) {
+        serviceNames.remove(action.name)
     }
 
     companion object {
