@@ -224,7 +224,9 @@ class TestService {
                             .build()
                     ).build()
                     .toString()
-            ros!!.onMessage(toSend)
+            runBlocking {
+                ros!!.onMessage(toSend)
+            }
         }
     }
 

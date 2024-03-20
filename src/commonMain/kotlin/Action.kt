@@ -1,16 +1,14 @@
 package com.github.thoebert.krosbridge
 
 import com.github.thoebert.krosbridge.rosmessages.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.transform
 import kotlin.reflect.KClass
 
 
 typealias ActionGoalSubscriber = (ActionGoal?, String?) -> Unit
-typealias ActionResultSubscriber = (ActionType, String?) -> Unit
 
 open class Action(
     open val ros: Ros, open val name: String,
@@ -24,22 +22,30 @@ open class Action(
         get() = goalSubscriber != null
 
     private var goalSubscriber: ActionGoalSubscriber? = null
-    private val resultSubscribers = mutableMapOf<String, ActionResultSubscriber>()
+    private val resultSubscribers = mutableMapOf<String, MutableStateFlow<ActionType?>>()
 
-    suspend fun sendGoalGeneric(goal: ActionGoal, feedback: Boolean = false, callback: ActionResultSubscriber) {
+    suspend fun sendGoalGeneric(
+        goal: ActionGoal,
+        feedback: Boolean = false/*, flow: StateFlow<ActionResult>*/
+    ): Flow<ActionType?> {
         val actionId = "call_action:$name:${ros.nextId()}"
-        resultSubscribers[actionId] = callback
+        resultSubscribers[actionId] = MutableStateFlow(null)
         ros.registerAction(this)
         ros.send(SendActionGoal(name, type, goal, id = actionId, feedback = feedback))
+        return resultSubscribers[actionId]!!.asStateFlow()
     }
 
     internal fun receivedFeedback(feedback: ActionFeedback?, id: String?) {
-        resultSubscribers[id]?.let { it(ActionType.ActionFeedback(feedback), id) }
+        resultSubscribers[id]!!
+        resultSubscribers[id]?.let { it.value = ActionType.ActionFeedback(feedback) }
     }
 
     internal fun receivedResult(result: ActionResult?, isResult: Boolean, id: String?) {
-        resultSubscribers[id]?.let { it(ActionType.ActionResult(result, isResult), id) }
+        resultSubscribers[id]?.let {
+            it.value = ActionType.ActionResult(result, isResult)
+        }
         ros.deregisterAction(this)
+
         resultSubscribers.remove(id)
     }
 
@@ -50,7 +56,7 @@ open class Action(
     suspend fun advertiseActionGeneric(callback: ActionGoalSubscriber?) {
         goalSubscriber = callback
         ros.registerAction(this)
-        ros.send(AdvertiseAction(name, type))
+        ros.send(AdvertiseAction(type, name))
     }
 
     suspend fun unadvertiseAction() {
@@ -64,21 +70,11 @@ open class Action(
     }
 
     suspend fun sendResult(result: ActionResult?, isResult: Boolean, id: String) {
-        ros.send(ResultAction(id, name, result, isResult))
-
-    }
-
-    suspend fun sendGoalGeneric(goal: ActionGoal): ActionType {
-        return suspendCoroutine { continuation ->
-            CoroutineScope(Dispatchers.Default).launch {
-                sendGoalGeneric(goal) { type, _ ->
-                    continuation.resume(type)
-                }
-            }
-        }
+        ros.send(ResultAction2(id, name,  result, isResult))
     }
 
 }
+
 
 open class GenericAction<In : ActionGoal, Feed : ActionFeedback, Res : ActionResult>(
     override val ros: Ros,
@@ -96,13 +92,19 @@ open class GenericAction<In : ActionGoal, Feed : ActionFeedback, Res : ActionRes
         }
     }
 
-    suspend fun sendGoal(goal: In): ActionType = super.sendGoalGeneric(goal).apply {
-        when (this) {
-            is ActionType.ActionFeedback -> this.data as Feed
-            is ActionType.ActionResult -> this.data as Res
-            else -> {}
+    suspend fun sendGoal(goal: In, feedback: Boolean): Flow<ActionType> =
+        super.sendGoalGeneric(goal, feedback).transform {
+            when (it) {
+                is ActionType.ActionFeedback -> emit(it.copy(it.data as Feed))
+                is ActionType.ActionResult -> {
+                    emit(it.copy(it.data as Res))
+                    //currentCoroutineContext().cancel(CancellationException("Get result"))
+                }
+
+                else -> {}
+            }
+
         }
-    }
 
 
     suspend fun sendFeedback(feedback: Feed?, id: String) {

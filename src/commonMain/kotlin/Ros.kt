@@ -54,12 +54,12 @@ class Ros(
     private val actionNames: MutableMap<String, Action> = HashMap()
 
 
-    private val logger = Napier.apply {base(DebugAntilog())  }
+    private val logger = Napier.apply { base(DebugAntilog()) }
 
 
     private val client = HttpClient {
         install(WebSockets)
-        install(Logging){
+        install(Logging) {
             this.level = LogLevel.ALL
         }
     }
@@ -126,7 +126,7 @@ class Ros(
             logger.i("Disconnecting from ${this@Ros.uRL}")
             try {
                 client.close()
-                session?.let { it.close() }
+                session?.close()
                 session = null
                 return true
             } catch (e: IOException) {
@@ -340,23 +340,22 @@ class Ros(
 
         when (rosmsg) {
             is Publish ->
-                topicByName(rosmsg.topic)?.let { it.receivedMessage(rosmsg.msg, rosmsg.id) }
+                topicByName(rosmsg.topic)?.receivedMessage(rosmsg.msg, rosmsg.id)
 
             is ResponseService ->
-                serviceByName(rosmsg.service)?.let { it.receivedResponse(rosmsg.values, rosmsg.result, rosmsg.id) }
+                serviceByName(rosmsg.service)?.receivedResponse(rosmsg.values, rosmsg.result, rosmsg.id)
 
             is CallService ->
-                serviceByName(rosmsg.service)?.let { it.receivedRequest(rosmsg.args, rosmsg.id) }
+                serviceByName(rosmsg.service)?.receivedRequest(rosmsg.args, rosmsg.id)
 
             is FeedbackAction ->
-                actionByName(rosmsg.action)?.let {
-                    it.receivedFeedback(rosmsg.values, rosmsg.id) }
+                actionByName(rosmsg.action)?.receivedFeedback(rosmsg.values, rosmsg.id)
 
             is ResultAction ->
-                actionByName(rosmsg.action)?.let { it.receivedResult(rosmsg.values, rosmsg.result, rosmsg.id) }
+                actionByName(rosmsg.action)?.receivedResult(rosmsg.values.result, rosmsg.result, rosmsg.id)
 
             is SendActionGoal ->
-                actionByName(rosmsg.action)?.let { it.receivedGoal(rosmsg.args, rosmsg.feedback, rosmsg.id) }
+                actionByName(rosmsg.action)?.receivedGoal(rosmsg.args, rosmsg.feedback, rosmsg.id)
 
             else ->
                 logger.e("Unrecognized op code: $rosmsg")

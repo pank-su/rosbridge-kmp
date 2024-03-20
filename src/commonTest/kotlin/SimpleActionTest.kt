@@ -1,4 +1,13 @@
-import com.github.thoebert.krosbridge.*
+import com.github.thoebert.krosbridge.ActionFeedback
+import com.github.thoebert.krosbridge.ActionGoal
+import com.github.thoebert.krosbridge.ActionResult
+import com.github.thoebert.krosbridge.Ros
+import com.github.thoebert.krosbridge.messages.action_tutorials_interfaces.action.Fibonacci
+import com.github.thoebert.krosbridge.messages.action_tutorials_interfaces.action.FibonacciResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
@@ -15,17 +24,43 @@ data class RotateResult(val delta: Float) : ActionResult()
 
 class SimpleActionTest {
 
-    @Test
-    fun simpleTurtleTest() = runTest {
-        val ros = Ros("localhost", port = 8080)
-        val action = Action(
-            ros,
-            "/turtle1/rotate_absolute",
-            type = "turtlesim/action/RotateAbsolute",
-            goalClz = RotateGoal::class,
-            feedbackClz = RotateFeedback::class,
-            resultClz = RotateResult::class
-        )
-        action.sendGoalGeneric(RotateGoal(1f))
+    suspend fun fibAction(fibonacciAction: Fibonacci, id: String, goal: Int) {
+        println(id)
+        fibonacciAction.sendFeedback(listOf(1), id)
+        delay(500)
+        val fibs = mutableListOf(1, 1)
+        fibonacciAction.sendFeedback(listOf(1, 1), id)
+        delay(500)
+
+        for (i in 1..<goal) {
+            fibs.add(fibs[i - 1] + fibs[i])
+            fibonacciAction.sendFeedback(fibs, id)
+            delay(500)
+
+        }
+        fibonacciAction.sendResult(FibonacciResult(fibs), true, id)
     }
+
+
+    @Test
+    fun simpleTest() = runTest {
+        val ros = Ros("localhost", port = 8080)
+        ros.connect()
+        /*val action = Fibonacci(ros, "/fibonacci")
+        action.sendGoal(true, 12).collect{
+            println(it)
+        }*/
+        val action = Fibonacci(ros, "fibonacci_kotlin")
+        action.advertiseAction { fibonacciGoal, s ->
+            CoroutineScope(Dispatchers.Default).launch {
+                fibAction(action, s!!, fibonacciGoal!!.order)
+            }
+            println(fibonacciGoal)
+        }
+        while (true){
+
+        }
+
+    }
+
 }

@@ -1,4 +1,4 @@
 ---
 string id
 byte passed
-DiagnosticStatus[] status
+diagnostic_msgs/msg/DiagnosticStatus[] status
