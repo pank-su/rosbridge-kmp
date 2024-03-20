@@ -8,8 +8,9 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.reflect.KClass
 
+
 typealias ActionGoalSubscriber = (ActionGoal?, String?) -> Unit
-typealias ActionResultSubscriber = (ActionResult?, ActionFeedback?, Boolean?, String?) -> Unit
+typealias ActionResultSubscriber = (ActionType, String?) -> Unit
 
 open class Action(
     open val ros: Ros, open val name: String,
@@ -25,19 +26,19 @@ open class Action(
     private var goalSubscriber: ActionGoalSubscriber? = null
     private val resultSubscribers = mutableMapOf<String, ActionResultSubscriber>()
 
-    suspend fun sendGoal(goal: ActionGoal, callback: ActionResultSubscriber) {
+    suspend fun sendGoalGeneric(goal: ActionGoal, feedback: Boolean = false, callback: ActionResultSubscriber) {
         val actionId = "call_action:$name:${ros.nextId()}"
         resultSubscribers[actionId] = callback
         ros.registerAction(this)
-        ros.send(SendActionGoal(name, type, goal, id = actionId))
+        ros.send(SendActionGoal(name, type, goal, id = actionId, feedback = feedback))
     }
 
     internal fun receivedFeedback(feedback: ActionFeedback?, id: String?) {
-        resultSubscribers[id]?.let { it(null, feedback, null, id) }
+        resultSubscribers[id]?.let { it(ActionType.ActionFeedback(feedback), id) }
     }
 
     internal fun receivedResult(result: ActionResult?, isResult: Boolean, id: String?) {
-        resultSubscribers[id]?.let { it(result, null, isResult, id) }
+        resultSubscribers[id]?.let { it(ActionType.ActionResult(result, isResult), id) }
         ros.deregisterAction(this)
         resultSubscribers.remove(id)
     }
@@ -46,7 +47,7 @@ open class Action(
         goalSubscriber?.let { it(goal, id) }
     }
 
-    suspend fun advertiseAction(callback: ActionGoalSubscriber?) {
+    suspend fun advertiseActionGeneric(callback: ActionGoalSubscriber?) {
         goalSubscriber = callback
         ros.registerAction(this)
         ros.send(AdvertiseAction(name, type))
@@ -58,7 +59,7 @@ open class Action(
         goalSubscriber = null
     }
 
-    suspend fun sendFeedback(feedback: ActionFeedback?, id: String) {
+    suspend fun sendFeedbackGeneric(feedback: ActionFeedback?, id: String) {
         ros.send(FeedbackAction(id, name, feedback))
     }
 
@@ -67,11 +68,11 @@ open class Action(
 
     }
 
-    suspend fun sendGoal(goal: ActionGoal): Triple<ActionResult?, ActionFeedback?, Boolean?> {
+    suspend fun sendGoalGeneric(goal: ActionGoal): ActionType {
         return suspendCoroutine { continuation ->
             CoroutineScope(Dispatchers.Default).launch {
-                sendGoal(goal) { result, feedback, isResult, _ ->
-                    continuation.resume(Triple(result, feedback, isResult))
+                sendGoalGeneric(goal) { type, _ ->
+                    continuation.resume(type)
                 }
             }
         }
@@ -90,21 +91,25 @@ open class GenericAction<In : ActionGoal, Feed : ActionFeedback, Res : ActionRes
     ) : Action(ros, name, type, goalClz, feedbackClz, resultClz) {
 
     suspend fun advertiseAction(callback: (In?, String?) -> Unit) {
-        return super.advertiseAction { goal, id ->
+        return super.advertiseActionGeneric { goal, id ->
             callback(goal as In?, id)
         }
     }
 
-    suspend fun sendGoal(goal: In): Triple<Res?, Feed?, Boolean?> {
-        val (result, feedback, isResult) = super.sendGoal(goal)
-        return Triple(result as Res?, feedback as Feed?, isResult)
+    suspend fun sendGoal(goal: In): ActionType = super.sendGoalGeneric(goal).apply {
+        when (this) {
+            is ActionType.ActionFeedback -> this.data as Feed
+            is ActionType.ActionResult -> this.data as Res
+            else -> {}
+        }
     }
 
-    suspend fun sendFeedback(feedback: Feed?, id: String){
-        super.sendFeedback(feedback, id)
+
+    suspend fun sendFeedback(feedback: Feed?, id: String) {
+        super.sendFeedbackGeneric(feedback, id)
     }
 
-    suspend fun sendResult(result: Res?, id: String, isResult: Boolean = true, ){
-        super.sendResult(result,  isResult, id)
+    suspend fun sendResult(result: Res?, id: String, isResult: Boolean = true) {
+        super.sendResult(result, isResult, id)
     }
 }

@@ -1,9 +1,11 @@
 package com.github.thoebert.krosbridge
 
 import com.github.thoebert.krosbridge.rosmessages.*
+import io.github.aakira.napier.DebugAntilog
 import io.github.aakira.napier.Napier
 import io.ktor.client.*
 import io.ktor.client.plugins.api.*
+import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.http.*
 import io.ktor.utils.io.charsets.*
@@ -52,11 +54,14 @@ class Ros(
     private val actionNames: MutableMap<String, Action> = HashMap()
 
 
-    private val logger = Napier
+    private val logger = Napier.apply {base(DebugAntilog())  }
 
 
     private val client = HttpClient {
         install(WebSockets)
+        install(Logging){
+            this.level = LogLevel.ALL
+        }
     }
 
     private var session: DefaultClientWebSocketSession? = null
@@ -199,6 +204,7 @@ class Ros(
     @OptIn(InternalSerializationApi::class)
     override fun selectDeserializer(content: JsonElement): KSerializer<out ROSMessage> {
         val op = getField(content, "op")
+        println(content)
         when (op) {
             Publish.OPERATION -> {
                 getField(content, "topic")?.let { topicName ->
@@ -277,6 +283,7 @@ class Ros(
      */
     @OptIn(ExperimentalEncodingApi::class)
     fun onMessage(message: String) {
+
         if (message.isEmpty()) return
         try {
             logger.d("Received message $message")
@@ -330,6 +337,7 @@ class Ros(
      * The ROSMessage from the incoming rosbridge message.
      */
     private fun handleMessage(rosmsg: ROSMessage) {
+
         when (rosmsg) {
             is Publish ->
                 topicByName(rosmsg.topic)?.let { it.receivedMessage(rosmsg.msg, rosmsg.id) }
@@ -341,7 +349,8 @@ class Ros(
                 serviceByName(rosmsg.service)?.let { it.receivedRequest(rosmsg.args, rosmsg.id) }
 
             is FeedbackAction ->
-                actionByName(rosmsg.action)?.let { it.receivedFeedback(rosmsg.values, rosmsg.id) }
+                actionByName(rosmsg.action)?.let {
+                    it.receivedFeedback(rosmsg.values, rosmsg.id) }
 
             is ResultAction ->
                 actionByName(rosmsg.action)?.let { it.receivedResult(rosmsg.values, rosmsg.result, rosmsg.id) }
