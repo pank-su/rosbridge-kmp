@@ -1,5 +1,7 @@
-package com.github.thoebert.krosbridge
+package com.github.thoebert.krosbridge.action
 
+import com.github.thoebert.krosbridge.Ros
+import com.github.thoebert.krosbridge.topic.Message
 import kotlinx.serialization.Serializable
 
 @Serializable

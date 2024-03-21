@@ -1,5 +1,5 @@
 import com.github.thoebert.krosbridge.Ros
-import com.github.thoebert.krosbridge.Topic
+import com.github.thoebert.krosbridge.topic.Topic
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

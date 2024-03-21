@@ -1,5 +1,6 @@
-package com.github.thoebert.krosbridge
+package com.github.thoebert.krosbridge.topic
 
+import com.github.thoebert.krosbridge.Ros
 import com.github.thoebert.krosbridge.rosmessages.*
 import kotlin.reflect.KClass
 

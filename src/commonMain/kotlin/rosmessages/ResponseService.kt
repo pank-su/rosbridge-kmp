@@ -1,7 +1,7 @@
 package com.github.thoebert.krosbridge.rosmessages
 
 import com.github.thoebert.krosbridge.Ros
-import com.github.thoebert.krosbridge.ServiceResponse
+import com.github.thoebert.krosbridge.service.ServiceResponse
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable

@@ -1,4 +1,4 @@
-package com.github.thoebert.krosbridge
+package com.github.thoebert.krosbridge.topic
 
 import kotlinx.serialization.Serializable
 

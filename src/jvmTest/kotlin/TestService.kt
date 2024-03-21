@@ -1,7 +1,7 @@
 import com.github.thoebert.krosbridge.Ros
-import com.github.thoebert.krosbridge.Service
-import com.github.thoebert.krosbridge.ServiceRequest
-import com.github.thoebert.krosbridge.ServiceResponse
+import com.github.thoebert.krosbridge.service.Service
+import com.github.thoebert.krosbridge.service.ServiceRequest
+import com.github.thoebert.krosbridge.service.ServiceResponse
 import jakarta.json.Json
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest

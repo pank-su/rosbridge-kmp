@@ -1,7 +1,6 @@
-import com.github.thoebert.krosbridge.Message
 import com.github.thoebert.krosbridge.Ros
-import com.github.thoebert.krosbridge.Topic
-import kotlinx.coroutines.*
+import com.github.thoebert.krosbridge.topic.Message
+import com.github.thoebert.krosbridge.topic.Topic
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlin.test.*

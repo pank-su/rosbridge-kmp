@@ -1,7 +1,7 @@
 package com.github.thoebert.krosbridge.rosmessages
 
-import com.github.thoebert.krosbridge.ActionResult
 import com.github.thoebert.krosbridge.Ros
+import com.github.thoebert.krosbridge.action.ActionResult
 import kotlinx.serialization.Serializable
 
 @Serializable

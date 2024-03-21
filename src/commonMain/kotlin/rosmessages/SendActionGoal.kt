@@ -1,7 +1,7 @@
 package com.github.thoebert.krosbridge.rosmessages
 
-import com.github.thoebert.krosbridge.ActionGoal
 import com.github.thoebert.krosbridge.Ros
+import com.github.thoebert.krosbridge.action.ActionGoal
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 

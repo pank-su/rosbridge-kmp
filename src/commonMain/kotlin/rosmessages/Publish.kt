@@ -1,7 +1,7 @@
 package com.github.thoebert.krosbridge.rosmessages
 
-import com.github.thoebert.krosbridge.Message
 import com.github.thoebert.krosbridge.Ros
+import com.github.thoebert.krosbridge.topic.Message
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
 

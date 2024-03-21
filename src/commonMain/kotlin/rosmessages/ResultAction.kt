@@ -1,6 +1,6 @@
 package com.github.thoebert.krosbridge.rosmessages
 
-import com.github.thoebert.krosbridge.ActionResultStatus
+import com.github.thoebert.krosbridge.action.ActionResultStatus
 import kotlinx.serialization.Serializable
 
 /*

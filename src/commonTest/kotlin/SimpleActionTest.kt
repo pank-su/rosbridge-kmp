@@ -1,7 +1,7 @@
-import com.github.thoebert.krosbridge.ActionFeedback
-import com.github.thoebert.krosbridge.ActionGoal
-import com.github.thoebert.krosbridge.ActionResult
 import com.github.thoebert.krosbridge.Ros
+import com.github.thoebert.krosbridge.action.ActionFeedback
+import com.github.thoebert.krosbridge.action.ActionGoal
+import com.github.thoebert.krosbridge.action.ActionResult
 import com.github.thoebert.krosbridge.messages.action_tutorials_interfaces.action.Fibonacci
 import com.github.thoebert.krosbridge.messages.action_tutorials_interfaces.action.FibonacciResult
 import kotlinx.coroutines.CoroutineScope

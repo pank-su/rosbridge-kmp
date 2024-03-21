@@ -1,4 +1,4 @@
-package com.github.thoebert.krosbridge
+package com.github.thoebert.krosbridge.service
 
 import kotlinx.serialization.Serializable
 
