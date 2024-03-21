@@ -1,7 +1,6 @@
 package com.github.thoebert.krosbridge.rosmessages
 
 import com.github.thoebert.krosbridge.ActionFeedback
-import com.github.thoebert.krosbridge.Ros
 import kotlinx.serialization.Serializable
 
 /*
@@ -13,11 +12,10 @@ import kotlinx.serialization.Serializable
  */
 
 @Serializable
-data class FeedbackAction(
+data class FeedbackAction<T>(
     override val id: String, val action: String,
-    @Serializable(with = Ros.ActionFeedbackSerializer::class)
-    val values: ActionFeedback? = null,
-) : ROSMessage(OPERATION) {
+    val values: T? = null,
+) : ROSMessage(OPERATION) where T: ActionFeedback {
     companion object {
         const val OPERATION = "action_feedback"
     }

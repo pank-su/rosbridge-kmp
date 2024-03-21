@@ -3,7 +3,7 @@ package com.github.thoebert.krosbridge
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class ActionResultStatus(
+data class ActionResultStatus<T: ActionResult>(
     val status: Short,
-    @Serializable(with = Ros.ActionResultSerializer::class) val result: ActionResult? = null,
+     val result: T? = null,
 ) : Message()

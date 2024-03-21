@@ -1,16 +1,15 @@
 package com.github.thoebert.krosbridge.rosmessages
 
 import com.github.thoebert.krosbridge.ActionResult
-import com.github.thoebert.krosbridge.Ros
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class ResultAction2(
+data class ResultAction2<T>(
     override val id: String,
     val action: String,
-    @Serializable(with = Ros.ActionResultSerializer::class) val values: ActionResult?,
+    val values: T?,
     val result: Boolean
-) : ROSMessage(OPERATION) {
+) : ROSMessage(OPERATION) where T : ActionResult {
     companion object {
         const val OPERATION = "action_result"
     }

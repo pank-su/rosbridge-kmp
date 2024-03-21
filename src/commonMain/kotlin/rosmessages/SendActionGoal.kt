@@ -1,7 +1,6 @@
 package com.github.thoebert.krosbridge.rosmessages
 
 import com.github.thoebert.krosbridge.ActionGoal
-import com.github.thoebert.krosbridge.Ros
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -18,16 +17,15 @@ import kotlinx.serialization.Serializable
  */
 
 @Serializable
-data class SendActionGoal(
+data class SendActionGoal<T>(
     val action: String,
     @SerialName("action_type") val actionType: String,
-    @Serializable(with = Ros.ActionSendGoalSerializer::class)
-    val args: ActionGoal? = null,
+    val args: T? = null,
     val feedback: Boolean? = null,
     val fragment_size: Int? = null,
     val compression: String? = null,
     override val id: String? = null
-) : ROSMessage(OPERATION) {
+) : ROSMessage(OPERATION) where T:ActionGoal{
     companion object {
         const val OPERATION = "send_action_goal"
     }

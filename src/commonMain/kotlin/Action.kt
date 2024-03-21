@@ -5,19 +5,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.transform
-import kotlin.reflect.KClass
 
 
 typealias ActionGoalSubscriber = (ActionGoal?, String?) -> Unit
 
-open class Action(
+open class Action<In, Feed, Res>(
     open val ros: Ros, open val name: String,
     open val type: String,
-    open val goalClz: KClass<out ActionGoal>,
-    open val feedbackClz: KClass<out ActionFeedback>,
-    open val resultClz: KClass<out ActionResult>,
-
-    ) {
+)  where In: ActionGoal, Feed:ActionFeedback, Res: ActionResult{
     val isAdvertised: Boolean
         get() = goalSubscriber != null
 
@@ -25,13 +20,13 @@ open class Action(
     private val resultSubscribers = mutableMapOf<String, MutableStateFlow<ActionType?>>()
 
     suspend fun sendGoalGeneric(
-        goal: ActionGoal,
+        goal: In,
         feedback: Boolean = false/*, flow: StateFlow<ActionResult>*/
     ): Flow<ActionType?> {
         val actionId = "call_action:$name:${ros.nextId()}"
         resultSubscribers[actionId] = MutableStateFlow(null)
         ros.registerAction(this)
-        ros.send(SendActionGoal(name, type, goal, id = actionId, feedback = feedback))
+        ros.send(SendActionGoal<In>(name, type, goal, id = actionId, feedback = feedback))
         return resultSubscribers[actionId]!!.asStateFlow()
     }
 
@@ -65,12 +60,12 @@ open class Action(
         goalSubscriber = null
     }
 
-    suspend fun sendFeedbackGeneric(feedback: ActionFeedback?, id: String) {
+    suspend fun sendFeedbackGeneric(feedback: Feed?, id: String) {
         ros.send(FeedbackAction(id, name, feedback))
     }
 
-    suspend fun sendResult(result: ActionResult?, isResult: Boolean, id: String) {
-        ros.send(ResultAction2(id, name,  result, isResult))
+    suspend fun sendResult(result: Res?, isResult: Boolean, id: String) {
+        ros.send(ResultAction2(id, name, result, isResult))
     }
 
 }
@@ -80,11 +75,9 @@ open class GenericAction<In : ActionGoal, Feed : ActionFeedback, Res : ActionRes
     override val ros: Ros,
     override val name: String,
     override val type: String,
-    override val goalClz: KClass<out ActionGoal>,
-    override val feedbackClz: KClass<out ActionFeedback>,
-    override val resultClz: KClass<out ActionResult>,
 
-    ) : Action(ros, name, type, goalClz, feedbackClz, resultClz) {
+
+    ) : Action<In, Feed, Res>(ros, name, type) {
 
     suspend fun advertiseAction(callback: (In?, String?) -> Unit) {
         return super.advertiseActionGeneric { goal, id ->
@@ -98,7 +91,6 @@ open class GenericAction<In : ActionGoal, Feed : ActionFeedback, Res : ActionRes
                 is ActionType.ActionFeedback -> emit(it.copy(it.data as Feed))
                 is ActionType.ActionResult -> {
                     emit(it.copy(it.data as Res))
-                    //currentCoroutineContext().cancel(CancellationException("Get result"))
                 }
 
                 else -> {}

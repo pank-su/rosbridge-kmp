@@ -1,7 +1,6 @@
 package com.github.thoebert.krosbridge.rosmessages
 
 import com.github.thoebert.krosbridge.Message
-import com.github.thoebert.krosbridge.Ros
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
 
@@ -14,14 +13,13 @@ import kotlinx.serialization.Serializable
  */
 
 @Serializable
-data class Publish(
+data class Publish<T>(
     val topic: String,
     @Contextual
-    @Serializable(with = Ros.MessageSerializer::class)
-    val msg: Message,
+    val msg: T,
     override val id: String? = null,
-): ROSMessage(OPERATION){
-    companion object{
+) : ROSMessage(OPERATION) where T : Message {
+    companion object {
         const val OPERATION = "publish"
     }
 }

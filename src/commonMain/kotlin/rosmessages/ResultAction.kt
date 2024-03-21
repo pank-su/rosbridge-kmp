@@ -1,5 +1,6 @@
 package com.github.thoebert.krosbridge.rosmessages
 
+import com.github.thoebert.krosbridge.ActionResult
 import com.github.thoebert.krosbridge.ActionResultStatus
 import kotlinx.serialization.Serializable
 
@@ -13,12 +14,12 @@ import kotlinx.serialization.Serializable
  */
 
 @Serializable
-data class ResultAction(
+data class ResultAction<T>(
     override val id: String,
     val action: String,
-    val values: ActionResultStatus,
+    val values: ActionResultStatus<T>,
     val result: Boolean
-) : ROSMessage(OPERATION) {
+) : ROSMessage(OPERATION) where T : ActionResult{
     companion object {
         const val OPERATION = "action_result"
     }

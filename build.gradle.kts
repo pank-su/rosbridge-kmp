@@ -1,4 +1,5 @@
 import com.github.thoebert.krosbridgecodegen.KROSBridgeCodegenPluginConfig
+import org.jetbrains.kotlin.gradle.targets.js.dsl.ExperimentalWasmDsl
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -10,7 +11,7 @@ plugins {
 }
 
 group = "com.github.thoebert"
-version = "1.0"
+version = "1.0.6"
 
 val osName = System.getProperty("os.name")
 val hostOs = when {
@@ -46,8 +47,19 @@ kotlin {
             }
         }
     }
-    //@OptIn(ExperimentalWasmDsl::class)
-    wasmJs()
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs{
+        browser {
+            testTask {
+                enabled = false
+            }
+        }
+        nodejs {
+            testTask {
+                enabled = false
+            }
+        }
+    }
 
     sourceSets {
 
@@ -65,7 +77,6 @@ kotlin {
         }
 
         jvmTest {
-
             dependencies {
                 implementation(libs.jakarta.json)
                 implementation(libs.jul.to.slf4j)

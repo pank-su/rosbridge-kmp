@@ -1,6 +1,5 @@
 package com.github.thoebert.krosbridge.rosmessages
 
-import com.github.thoebert.krosbridge.Ros
 import com.github.thoebert.krosbridge.ServiceResponse
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -16,14 +15,13 @@ import kotlinx.serialization.Serializable
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class ResponseService constructor(
+data class ResponseService<T> constructor(
     val service: String,
-    @Serializable(with = Ros.ServiceResponseSerializer::class)
-    val values: ServiceResponse? = null,
+    val values: T? = null,
     @EncodeDefault
     val result: Boolean = true,
     override val id: String? = null,
-) : ROSMessage(OPERATION) {
+) : ROSMessage(OPERATION) where T : ServiceResponse{
     companion object {
         const val OPERATION = "service_response"
     }

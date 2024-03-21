@@ -1,6 +1,5 @@
 package com.github.thoebert.krosbridge.rosmessages
 
-import com.github.thoebert.krosbridge.Ros
 import com.github.thoebert.krosbridge.ServiceRequest
 import kotlinx.serialization.Serializable
 
@@ -15,15 +14,14 @@ import kotlinx.serialization.Serializable
  */
 
 @Serializable
-data class CallService (
+data class CallService<T> (
     val service: String,
     override val id: String? = null,
-    @Serializable(with = Ros.ServiceRequestSerializer::class)
-    val args: ServiceRequest? = null,
+    val args: T? = null,
     val type: String? = null,
     val fragment_size: Int? = null,
     val compression: String? = null,
-): ROSMessage(OPERATION){
+): ROSMessage(OPERATION) where T:ServiceRequest{
     companion object{
         const val OPERATION = "call_service"
     }

@@ -8,6 +8,7 @@ import io.ktor.client.plugins.api.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.http.*
+import io.ktor.serialization.kotlinx.*
 import io.ktor.utils.io.charsets.*
 import io.ktor.utils.io.core.*
 import io.ktor.utils.io.core.EOFException
@@ -21,7 +22,6 @@ import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Image
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import kotlin.reflect.KClass
 
 /**
  * The Ros object is the main connection point to the rosbridge server. This
@@ -51,14 +51,16 @@ class Ros(
     // keeps track of callback functions for a given service request
     private val serviceNames: MutableMap<String, Service> = HashMap()
 
-    private val actionNames: MutableMap<String, Action> = HashMap()
+    private val actionNames: MutableMap<String, Action<*, *, *>> = HashMap()
 
 
     private val logger = Napier.apply { base(DebugAntilog()) }
 
 
     private val client = HttpClient {
-        install(WebSockets)
+        install(WebSockets) {
+            contentConverter = KotlinxWebsocketSerializationConverter(Json)
+        }
         install(Logging) {
             this.level = LogLevel.ALL
         }
@@ -97,9 +99,9 @@ class Ros(
             try {
                 logger.i("Connecting to ${this@Ros.uRL}")
                 this@Ros.session = client.webSocketSession(this@Ros.uRL)
-                for (message in this@Ros.session!!.incoming) {
-                    message as? Frame.Text ?: continue
-                    onMessage(message.readText())
+                while (session != null) {
+
+                    onMessage(session!!.receiveDeserialized<ROSMessage>())
                 }
             } catch (e: EOFException) {
                 logger.d("Handling EOFException in Websocket coroutine: ", e)
@@ -168,7 +170,7 @@ class Ros(
         }
     }
 
-    fun actionByName(actionName: String): Action? {
+    fun actionByName(actionName: String): Action<*,*,*>? {
         val action = actionNames[actionName]
         return if (action != null) {
             action
@@ -179,24 +181,6 @@ class Ros(
     }
 
 
-    abstract class GuidedSerializer<T : Any>(baseClass: KClass<T>) : JsonContentPolymorphicSerializer<T>(baseClass) {
-
-        var serializer: DeserializationStrategy<out T>? = null
-
-        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<out T> {
-            if (serializer == null) throw IllegalArgumentException("No valid serialization type existing")
-            return serializer!!
-        }
-    }
-
-    object ActionSendGoalSerializer : GuidedSerializer<ActionGoal>(ActionGoal::class)
-    object ActionFeedbackSerializer : GuidedSerializer<ActionFeedback>(ActionFeedback::class)
-
-    object ActionResultSerializer : GuidedSerializer<ActionResult>(ActionResult::class)
-    object ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
-    object ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
-    object MessageSerializer : GuidedSerializer<Message>(Message::class)
-
     private fun getField(content: JsonElement, field: String): String? {
         return content.jsonObject[field]?.jsonPrimitive?.content
     }
@@ -204,8 +188,7 @@ class Ros(
     @OptIn(InternalSerializationApi::class)
     override fun selectDeserializer(content: JsonElement): KSerializer<out ROSMessage> {
         val op = getField(content, "op")
-        println(content)
-        when (op) {
+        /*when (op) {
             Publish.OPERATION -> {
                 getField(content, "topic")?.let { topicName ->
                     topicByName(topicName)?.let { MessageSerializer.serializer = it.clz.serializer() }
@@ -249,27 +232,33 @@ class Ros(
                     }
                 }
             }
-        }
+        }*/
         return when (op) {
             Advertise.OPERATION -> Advertise.serializer()
             AdvertiseService.OPERATION -> AdvertiseService.serializer()
             Authenticate.OPERATION -> Authenticate.serializer()
-            CallService.OPERATION -> CallService.serializer()
+            /*
+                        CallService.OPERATION -> CallService.serializer()
+            */
             Fragmentation.OPERATION -> Fragmentation.serializer()
             PNGCompression.OPERATION -> PNGCompression.serializer()
-            Publish.OPERATION -> Publish.serializer()
-            ResponseService.OPERATION -> ResponseService.serializer()
+            /*Publish.OPERATION -> Publish.serializer()
+            ResponseService.OPERATION -> ResponseService.serializer()*/
             Subscribe.OPERATION -> Subscribe.serializer()
             Unadvertise.OPERATION -> Unadvertise.serializer()
             UnadvertiseService.OPERATION -> UnadvertiseService.serializer()
             Unsubscribe.OPERATION -> Unsubscribe.serializer()
             AdvertiseAction.OPERATION -> AdvertiseAction.serializer()
-            FeedbackAction.OPERATION -> FeedbackAction.serializer()
+            /*FeedbackAction.OPERATION -> FeedbackAction.serializer()
             ResultAction.OPERATION -> ResultAction.serializer()
-            SendActionGoal.OPERATION -> SendActionGoal.serializer()
+            SendActionGoal.OPERATION -> SendActionGoal.serializer()*/
             UnadvertiseAction.OPERATION -> UnadvertiseAction.serializer()
             else -> throw IllegalArgumentException("Coult not find op named $op")
         }
+    }
+
+    internal fun onMessage(message: String) {
+        onMessage(Json.decodeFromString<ROSMessage>(message))
     }
 
 
@@ -282,15 +271,15 @@ class Ros(
      * The incoming JSON message from rosbridge.
      */
     @OptIn(ExperimentalEncodingApi::class)
-    fun onMessage(message: String) {
+    fun onMessage(message: ROSMessage) {
 
-        if (message.isEmpty()) return
+        // if (message.isEmpty()) return
         try {
             logger.d("Received message $message")
-            val rosmsg = Json.decodeFromString(this, message)
 
-            if (rosmsg is PNGCompression) {
-                val data: String = rosmsg.data
+
+            if (message is PNGCompression) {
+                val data: String = message.data
                 // decompress the PNG data
                 // check for compression
                 val bytes: ByteArray = Base64.decode(data.toByteArray())
@@ -318,7 +307,7 @@ class Ros(
                     handleMessage(newJsonObject)
                 }
             } else {
-                handleMessage(rosmsg)
+                handleMessage(message)
             }
         } catch (e: IOException) {
             logger.e("Invalid incoming message $message", e)
@@ -339,22 +328,23 @@ class Ros(
     private fun handleMessage(rosmsg: ROSMessage) {
 
         when (rosmsg) {
-            is Publish ->
+            is Publish<*> -> {
                 topicByName(rosmsg.topic)?.receivedMessage(rosmsg.msg, rosmsg.id)
+            }
 
-            is ResponseService ->
+            is ResponseService<*> ->
                 serviceByName(rosmsg.service)?.receivedResponse(rosmsg.values, rosmsg.result, rosmsg.id)
 
-            is CallService ->
+            is CallService<*> ->
                 serviceByName(rosmsg.service)?.receivedRequest(rosmsg.args, rosmsg.id)
 
-            is FeedbackAction ->
+            is FeedbackAction<*> ->
                 actionByName(rosmsg.action)?.receivedFeedback(rosmsg.values, rosmsg.id)
 
-            is ResultAction ->
+            is ResultAction<*> ->
                 actionByName(rosmsg.action)?.receivedResult(rosmsg.values.result, rosmsg.result, rosmsg.id)
 
-            is SendActionGoal ->
+            is SendActionGoal<*> ->
                 actionByName(rosmsg.action)?.receivedGoal(rosmsg.args, rosmsg.feedback, rosmsg.id)
 
             else ->
@@ -369,7 +359,7 @@ class Ros(
      * The JSON object to send to rosbridge.
      * @return If the sending of the message was successful.
      */
-    suspend fun send(jsonString: String): Boolean {
+    /*suspend fun send(jsonString: String): Boolean {
         if (isConnected) { // check the connection
             try {
                 logger.d("Sending message $jsonString")
@@ -382,7 +372,11 @@ class Ros(
             logger.e("Could not send message because of disconnection")
         }
         return false // message send failed
-    }
+    }*/
+
+    internal suspend fun send(message: String) =
+        send(Json.decodeFromString<ROSMessage>(message))
+
 
     /**
      * Send the given ROSMessage to rosbridge.
@@ -392,7 +386,18 @@ class Ros(
      * @return If the sending of the message was successful.
      */
     suspend fun send(rosmsg: ROSMessage): Boolean {
-        return send(Json.encodeToString(this, rosmsg))
+        if (isConnected) { // check the connection
+            try {
+                // logger.d("Sending message ")
+                session!!.sendSerialized(rosmsg)
+                return true
+            } catch (e: IOException) {
+                logger.e("Could not send message", e)
+            }
+        } else {
+            logger.e("Could not send message because of disconnection")
+        }
+        return false // message send failed
     }
 
 
@@ -471,12 +476,12 @@ class Ros(
         serviceNames.remove(service.name) // remove the callback
     }
 
-    fun registerAction(action: Action) {
+    fun registerAction(action: Action<*,*,*>) {
         if (action.name in actionNames) throw IllegalArgumentException("Duplicate Action registration: ${action.name}")
         actionNames[action.name] = action
     }
 
-    fun deregisterAction(action: Action) {
+    fun deregisterAction(action: Action<*,*,*>) {
         serviceNames.remove(action.name)
     }
 
