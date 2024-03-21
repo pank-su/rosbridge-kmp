@@ -4,13 +4,12 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.androidLibrary)
-
     id("io.github.thoebert.krosbridge-codegen") version "1.0.6"
     `maven-publish`
 }
 
-group = "com.github.thoebert"
-version = "1.0"
+group = "io.github.thoebert"
+version = "1.0.6"
 
 val osName = System.getProperty("os.name")
 val hostOs = when {
@@ -34,6 +33,32 @@ if (project.hasProperty("skiko.version")) {
     skiaVersion = project.properties["skiko.version"] as String
 }
 
+val resourcesDir = "$buildDir/resources"
+val skikoWasm by configurations.creating
+
+val isCompositeBuild = extra.properties.getOrDefault("skiko.composite.build", "") == "1"
+
+val unzipTask = tasks.register("unzipWasm", Copy::class) {
+    destinationDir = file(resourcesDir)
+    from(skikoWasm.map { zipTree(it) })
+
+    if (isCompositeBuild) {
+        val skikoWasmJarTask = gradle.includedBuild("skiko").task(":skikoWasmJar")
+        dependsOn(skikoWasmJarTask)
+    }
+}
+
+dependencies {
+    if (isCompositeBuild) {
+        val filePath = gradle.includedBuild("skiko").projectDir
+            .resolve("./build/libs/skiko-wasm-$skiaVersion.jar")
+        skikoWasm(files(filePath))
+    } else {
+        skikoWasm("org.jetbrains.skiko:skiko-js-wasm-runtime:$skiaVersion")
+    }
+}
+
+
 kotlin {
 
 
@@ -46,8 +71,32 @@ kotlin {
             }
         }
     }
+
+    js(IR) {
+        moduleName = "krosbridge-js"
+        browser {
+            commonWebpackConfig {
+                outputFileName = "krosbridge-js.js"
+            }
+        }
+        binaries.executable()
+    }
+
     //@OptIn(ExperimentalWasmDsl::class)
-    wasmJs()
+    wasmJs {
+        browser {
+            testTask {
+                enabled = false
+            }
+
+        }
+        nodejs {
+            testTask {
+                enabled = false
+            }
+        }
+        binaries.executable()
+    }
 
     sourceSets {
 
@@ -84,12 +133,13 @@ kotlin {
             kotlin.srcDirs("${buildDir}/generated/source/ros")
             dependencies {
                 implementation(libs.napier)
-                implementation(libs.kim)
+                // implementation(libs.kim)
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.ktor.client)
                 implementation(libs.ktor.client.logging)
-                implementation(libs.ktor.client.content.neogation)
-                implementation(libs.ktor.serialization.kotlinx.json)
+                // implementation(libs.ktor.client.content.neogation)
+                // implementation(libs.ktor.serialization.kotlinx.json)
+                implementation(libs.kotlinx.serialization.core)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.coroutines)
                 implementation("org.jetbrains.skiko:skiko:$skiaVersion")
@@ -104,6 +154,27 @@ kotlin {
             }
 
         }
+        val wasmJsMain by getting {
+            dependsOn(commonMain.get())
+            resources.setSrcDirs(resources.srcDirs)
+            resources.srcDirs(unzipTask.map { it.destinationDir })
+        }
+        val wasmJsTest by getting {
+            dependsOn(wasmJsMain)
+            resources.setSrcDirs(resources.srcDirs)
+            resources.srcDirs(unzipTask.map { it.destinationDir })
+        }
+        /*val jsWasmMain by creating {
+            dependsOn(commonMain.get())
+            resources.setSrcDirs(resources.srcDirs)
+            resources.srcDirs(unzipTask.map { it.destinationDir })
+        }
+        val wasmJsMain by getting {
+            dependsOn(jsWasmMain)
+        }
+        val jsMain by getting {
+            dependsOn(jsWasmMain)
+        }*/
     }
 
 
@@ -114,6 +185,17 @@ configure<KROSBridgeCodegenPluginConfig> {
     packageName.set("com.github.thoebert.krosbridge.messages")
 }
 
+rootProject.plugins.withType<org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin> {
+    rootProject.the<org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootExtension>().nodeVersion = "16.0.0"
+}
+
+project.tasks.withType(org.jetbrains.kotlin.gradle.dsl.KotlinJsCompile::class.java).configureEach {
+    kotlinOptions.freeCompilerArgs += listOf("-Xir-dce-runtime-diagnostic=log")
+}
+
+rootProject.extensions.configure<org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootExtension> {
+    versions.webpackCli.version = "4.10.0"
+}
 
 
 publishing {

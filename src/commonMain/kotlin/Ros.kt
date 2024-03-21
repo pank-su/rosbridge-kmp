@@ -1,8 +1,20 @@
 package com.github.thoebert.krosbridge
 
+import com.github.thoebert.krosbridge.action.Action
+import com.github.thoebert.krosbridge.action.ActionFeedback
+import com.github.thoebert.krosbridge.action.ActionGoal
+import com.github.thoebert.krosbridge.action.ActionResult
 import com.github.thoebert.krosbridge.rosmessages.*
+import com.github.thoebert.krosbridge.service.Service
+import com.github.thoebert.krosbridge.service.ServiceRequest
+import com.github.thoebert.krosbridge.service.ServiceResponse
+import com.github.thoebert.krosbridge.topic.Message
+import com.github.thoebert.krosbridge.topic.Topic
+import io.github.aakira.napier.DebugAntilog
 import io.github.aakira.napier.Napier
 import io.ktor.client.*
+import io.ktor.client.plugins.api.*
+import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.http.*
 import io.ktor.utils.io.charsets.*
@@ -48,12 +60,17 @@ class Ros(
     // keeps track of callback functions for a given service request
     private val serviceNames: MutableMap<String, Service> = HashMap()
 
+    private val actionNames: MutableMap<String, Action> = HashMap()
 
-    private val logger = Napier
+
+    private val logger = Napier.apply { base(DebugAntilog()) }
 
 
     private val client = HttpClient {
         install(WebSockets)
+        install(Logging) {
+            this.level = LogLevel.ALL
+        }
     }
 
     private var session: DefaultClientWebSocketSession? = null
@@ -118,7 +135,7 @@ class Ros(
             logger.i("Disconnecting from ${this@Ros.uRL}")
             try {
                 client.close()
-                session?.let { it.close() }
+                session?.close()
                 session = null
                 return true
             } catch (e: IOException) {
@@ -160,10 +177,20 @@ class Ros(
         }
     }
 
+    fun actionByName(actionName: String): Action? {
+        val action = actionNames[actionName]
+        return if (action != null) {
+            action
+        } else {
+            logger.e("Invalid service name $action")
+            null
+        }
+    }
+
 
     abstract class GuidedSerializer<T : Any>(baseClass: KClass<T>) : JsonContentPolymorphicSerializer<T>(baseClass) {
 
-        var serializer: DeserializationStrategy<out T>? = null
+        var serializer: DeserializationStrategy<T>? = null
 
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<out T> {
             if (serializer == null) throw IllegalArgumentException("No valid serialization type existing")
@@ -171,9 +198,26 @@ class Ros(
         }
     }
 
-    object ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
-    object ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
-    object MessageSerializer : GuidedSerializer<Message>(Message::class)
+    internal val actionSendGoalSerializer =
+        ActionSendGoalSerializer() // object : GuidedSerializer<ActionGoal>(ActionGoal::class){}
+    internal val actionFeedbackSerializer = ActionFeedbackSerializer()
+    internal val actionResultSerializer = ActionResultSerializer()
+
+    internal val serviceRequestSerializer = ServiceRequestSerializer()
+
+    internal val serviceResponseSerializer = ServiceResponseSerializer()
+
+    internal val messageSerializer = MessageSerializer()
+
+
+
+    internal class ActionSendGoalSerializer : GuidedSerializer<ActionGoal>(ActionGoal::class)
+    internal class ActionFeedbackSerializer : GuidedSerializer<ActionFeedback>(ActionFeedback::class)
+
+    internal class ActionResultSerializer : GuidedSerializer<ActionResult>(ActionResult::class)
+    internal class ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
+    internal class ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
+    internal  class MessageSerializer : GuidedSerializer<Message>(Message::class)
 
     private fun getField(content: JsonElement, field: String): String? {
         return content.jsonObject[field]?.jsonPrimitive?.content
@@ -182,23 +226,48 @@ class Ros(
     @OptIn(InternalSerializationApi::class)
     override fun selectDeserializer(content: JsonElement): KSerializer<out ROSMessage> {
         val op = getField(content, "op")
+        println(content)
         when (op) {
             Publish.OPERATION -> {
                 getField(content, "topic")?.let { topicName ->
-                    topicByName(topicName)?.let { MessageSerializer.serializer = it.clz.serializer() }
+                    topicByName(topicName)?.let { messageSerializer.serializer = it.clz.serializer() }
                 }
             }
 
             CallService.OPERATION -> {
                 getField(content, "service")?.let { serviceName ->
-                    serviceByName(serviceName)?.let { ServiceRequestSerializer.serializer = it.requestClz.serializer() }
+                    serviceByName(serviceName)?.let { serviceRequestSerializer.serializer = it.requestClz.serializer() }
                 }
             }
 
             ResponseService.OPERATION -> {
                 getField(content, "service")?.let { serviceName ->
                     serviceByName(serviceName)?.let {
-                        ServiceResponseSerializer.serializer = it.responseClz.serializer()
+                        serviceResponseSerializer.serializer = it.responseClz.serializer()
+                    }
+                }
+            }
+
+            FeedbackAction.OPERATION -> {
+                getField(content, "action")?.let { actionName ->
+                    actionByName(actionName)?.let {
+                        actionFeedbackSerializer.serializer = it.feedbackClz.serializer()
+                    }
+                }
+            }
+
+            ResultAction.OPERATION -> {
+                getField(content, "action")?.let { actionName ->
+                    actionByName(actionName)?.let {
+                        actionResultSerializer.serializer = it.resultClz.serializer()
+                    }
+                }
+            }
+
+            SendActionGoal.OPERATION -> {
+                getField(content, "action")?.let { actionName ->
+                    actionByName(actionName)?.let {
+                        actionSendGoalSerializer.serializer = it.goalClz.serializer()
                     }
                 }
             }
@@ -216,6 +285,11 @@ class Ros(
             Unadvertise.OPERATION -> Unadvertise.serializer()
             UnadvertiseService.OPERATION -> UnadvertiseService.serializer()
             Unsubscribe.OPERATION -> Unsubscribe.serializer()
+            AdvertiseAction.OPERATION -> AdvertiseAction.serializer()
+            FeedbackAction.OPERATION -> FeedbackAction.serializer()
+            ResultAction.OPERATION -> ResultAction.serializer()
+            SendActionGoal.OPERATION -> SendActionGoal.serializer()
+            UnadvertiseAction.OPERATION -> UnadvertiseAction.serializer()
             else -> throw IllegalArgumentException("Coult not find op named $op")
         }
     }
@@ -231,6 +305,7 @@ class Ros(
      */
     @OptIn(ExperimentalEncodingApi::class)
     fun onMessage(message: String) {
+
         if (message.isEmpty()) return
         try {
             logger.d("Received message $message")
@@ -284,15 +359,25 @@ class Ros(
      * The ROSMessage from the incoming rosbridge message.
      */
     private fun handleMessage(rosmsg: ROSMessage) {
+
         when (rosmsg) {
             is Publish ->
-                topicByName(rosmsg.topic)?.let { it.receivedMessage(rosmsg.msg, rosmsg.id) }
+                topicByName(rosmsg.topic)?.receivedMessage(rosmsg.msg, rosmsg.id)
 
             is ResponseService ->
-                serviceByName(rosmsg.service)?.let { it.receivedResponse(rosmsg.values, rosmsg.result, rosmsg.id) }
+                serviceByName(rosmsg.service)?.receivedResponse(rosmsg.values, rosmsg.result, rosmsg.id)
 
             is CallService ->
-                serviceByName(rosmsg.service)?.let { it.receivedRequest(rosmsg.args, rosmsg.id) }
+                serviceByName(rosmsg.service)?.receivedRequest(rosmsg.args, rosmsg.id)
+
+            is FeedbackAction ->
+                actionByName(rosmsg.action)?.receivedFeedback(rosmsg.values, rosmsg.id)
+
+            is ResultAction ->
+                actionByName(rosmsg.action)?.receivedResult(rosmsg.values.result, rosmsg.result, rosmsg.id)
+
+            is SendActionGoal ->
+                actionByName(rosmsg.action)?.receivedGoal(rosmsg.args, rosmsg.feedback, rosmsg.id)
 
             else ->
                 logger.e("Unrecognized op code: $rosmsg")
@@ -406,6 +491,15 @@ class Ros(
      */
     fun deregisterService(service: Service) {
         serviceNames.remove(service.name) // remove the callback
+    }
+
+    fun registerAction(action: Action) {
+        if (action.name in actionNames) throw IllegalArgumentException("Duplicate Action registration: ${action.name}")
+        actionNames[action.name] = action
+    }
+
+    fun deregisterAction(action: Action) {
+        serviceNames.remove(action.name)
     }
 
     companion object {

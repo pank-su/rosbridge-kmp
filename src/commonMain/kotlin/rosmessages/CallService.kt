@@ -1,7 +1,7 @@
 package com.github.thoebert.krosbridge.rosmessages
 
 import com.github.thoebert.krosbridge.Ros
-import com.github.thoebert.krosbridge.ServiceRequest
+import com.github.thoebert.krosbridge.service.ServiceRequest
 import kotlinx.serialization.Serializable
 
 /*
