@@ -190,7 +190,7 @@ class Ros(
 
     abstract class GuidedSerializer<T : Any>(baseClass: KClass<T>) : JsonContentPolymorphicSerializer<T>(baseClass) {
 
-        var serializer: DeserializationStrategy<out T>? = null
+        var serializer: DeserializationStrategy<T>? = null
 
         override fun selectDeserializer(element: JsonElement): DeserializationStrategy<out T> {
             if (serializer == null) throw IllegalArgumentException("No valid serialization type existing")
@@ -198,13 +198,26 @@ class Ros(
         }
     }
 
-    object ActionSendGoalSerializer : GuidedSerializer<ActionGoal>(ActionGoal::class)
-    object ActionFeedbackSerializer : GuidedSerializer<ActionFeedback>(ActionFeedback::class)
+    internal val actionSendGoalSerializer =
+        ActionSendGoalSerializer() // object : GuidedSerializer<ActionGoal>(ActionGoal::class){}
+    internal val actionFeedbackSerializer = ActionFeedbackSerializer()
+    internal val actionResultSerializer = ActionResultSerializer()
 
-    object ActionResultSerializer : GuidedSerializer<ActionResult>(ActionResult::class)
-    object ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
-    object ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
-    object MessageSerializer : GuidedSerializer<Message>(Message::class)
+    internal val serviceRequestSerializer = ServiceRequestSerializer()
+
+    internal val serviceResponseSerializer = ServiceResponseSerializer()
+
+    internal val messageSerializer = MessageSerializer()
+
+
+
+    internal class ActionSendGoalSerializer : GuidedSerializer<ActionGoal>(ActionGoal::class)
+    internal class ActionFeedbackSerializer : GuidedSerializer<ActionFeedback>(ActionFeedback::class)
+
+    internal class ActionResultSerializer : GuidedSerializer<ActionResult>(ActionResult::class)
+    internal class ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
+    internal class ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
+    internal  class MessageSerializer : GuidedSerializer<Message>(Message::class)
 
     private fun getField(content: JsonElement, field: String): String? {
         return content.jsonObject[field]?.jsonPrimitive?.content
@@ -217,20 +230,20 @@ class Ros(
         when (op) {
             Publish.OPERATION -> {
                 getField(content, "topic")?.let { topicName ->
-                    topicByName(topicName)?.let { MessageSerializer.serializer = it.clz.serializer() }
+                    topicByName(topicName)?.let { messageSerializer.serializer = it.clz.serializer() }
                 }
             }
 
             CallService.OPERATION -> {
                 getField(content, "service")?.let { serviceName ->
-                    serviceByName(serviceName)?.let { ServiceRequestSerializer.serializer = it.requestClz.serializer() }
+                    serviceByName(serviceName)?.let { serviceRequestSerializer.serializer = it.requestClz.serializer() }
                 }
             }
 
             ResponseService.OPERATION -> {
                 getField(content, "service")?.let { serviceName ->
                     serviceByName(serviceName)?.let {
-                        ServiceResponseSerializer.serializer = it.responseClz.serializer()
+                        serviceResponseSerializer.serializer = it.responseClz.serializer()
                     }
                 }
             }
@@ -238,7 +251,7 @@ class Ros(
             FeedbackAction.OPERATION -> {
                 getField(content, "action")?.let { actionName ->
                     actionByName(actionName)?.let {
-                        ActionFeedbackSerializer.serializer = it.feedbackClz.serializer()
+                        actionFeedbackSerializer.serializer = it.feedbackClz.serializer()
                     }
                 }
             }
@@ -246,7 +259,7 @@ class Ros(
             ResultAction.OPERATION -> {
                 getField(content, "action")?.let { actionName ->
                     actionByName(actionName)?.let {
-                        ActionResultSerializer.serializer = it.resultClz.serializer()
+                        actionResultSerializer.serializer = it.resultClz.serializer()
                     }
                 }
             }
@@ -254,7 +267,7 @@ class Ros(
             SendActionGoal.OPERATION -> {
                 getField(content, "action")?.let { actionName ->
                     actionByName(actionName)?.let {
-                        ActionSendGoalSerializer.serializer = it.goalClz.serializer()
+                        actionSendGoalSerializer.serializer = it.goalClz.serializer()
                     }
                 }
             }

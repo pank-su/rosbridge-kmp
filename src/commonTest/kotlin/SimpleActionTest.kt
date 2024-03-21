@@ -4,10 +4,7 @@ import com.github.thoebert.krosbridge.action.ActionGoal
 import com.github.thoebert.krosbridge.action.ActionResult
 import com.github.thoebert.krosbridge.messages.action_tutorials_interfaces.action.Fibonacci
 import com.github.thoebert.krosbridge.messages.action_tutorials_interfaces.action.FibonacciResult
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
@@ -46,20 +43,20 @@ class SimpleActionTest {
     fun simpleTest() = runTest {
         val ros = Ros("localhost", port = 8080)
         ros.connect()
-        /*val action = Fibonacci(ros, "/fibonacci")
+        val action = Fibonacci(ros, "/fibonacci")
         action.sendGoal(true, 12).collect{
             println(it)
-        }*/
-        val action = Fibonacci(ros, "fibonacci_kotlin")
-        action.advertiseAction { fibonacciGoal, s ->
-            CoroutineScope(Dispatchers.Default).launch {
-                fibAction(action, s!!, fibonacciGoal!!.order)
-            }
-            println(fibonacciGoal)
         }
-        while (true){
-
-        }
+//        val action = Fibonacci(ros, "fibonacci_kotlin")
+//        action.advertiseAction { fibonacciGoal, s ->
+//            CoroutineScope(Dispatchers.Default).launch {
+//                fibAction(action, s!!, fibonacciGoal!!.order)
+//            }
+//            println(fibonacciGoal)
+//        }
+//        while (true){
+//
+//        }
 
     }
 
