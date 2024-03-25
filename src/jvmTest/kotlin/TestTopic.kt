@@ -1,13 +1,15 @@
 import com.github.thoebert.krosbridge.Ros
 import com.github.thoebert.krosbridge.topic.Message
 import com.github.thoebert.krosbridge.topic.Topic
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlin.test.*
 
 
 @Serializable
-data class MyType1(val test1 : String) : Message()
+data class MyType1(val test1: String) : Message()
 
 class TestTopic {
     private lateinit var ros: Ros
@@ -17,6 +19,7 @@ class TestTopic {
     private lateinit var t3: Topic
     private lateinit var t4: Topic
     private lateinit var t5: Topic
+
     @BeforeTest
     fun setUp() = runTest {
         ros = Ros()
@@ -93,14 +96,19 @@ class TestTopic {
 
     @Test
     fun testSubscribe() = runTest {
-        var latestMessage : Message? = null
-        t1.subscribeGeneric (this) { msg, _ -> latestMessage = msg }
+        var latestMessage: Message? = null
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage = pair?.first }
+
+            }
+        }
 
         while (DummyHandler.latest == null) Thread.yield()
         assertNotNull(DummyHandler.latest)
         assertEquals(
             """{"op":"subscribe","topic":"myTopic1","id":"subscribe:myTopic1:0","type":"myType1","throttle_rate":0,"compression":"none"}""",
-                        DummyHandler.latest.toString()
+            DummyHandler.latest.toString()
         )
         DummyHandler.latest = null
         ros.onMessage(
@@ -116,8 +124,13 @@ class TestTopic {
 
     @Test
     fun testUnsubscribe() = runTest {
-        var latestMessage : Message? = null
-        t1.subscribeGeneric (this) { msg, _ -> latestMessage = msg }
+        var latestMessage: Message? = null
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage = pair?.first }
+
+            }
+        }
         while (DummyHandler.latest == null) Thread.yield()
         assertFalse(t1.isAdvertised)
         assertTrue(t1.isSubscribed)
@@ -133,9 +146,10 @@ class TestTopic {
         )
 
         DummyHandler.latest = null
-        ros.send("{\"" + JRosbridge.FIELD_OP + "\":\"" + JRosbridge.OP_CODE_PUBLISH + "\",\""
-                + JRosbridge.FIELD_TOPIC + "\":\"myTopic1\",\""
-                + JRosbridge.FIELD_MESSAGE + "\":{\"test1\":\"test2\"}}"
+        ros.send(
+            "{\"" + JRosbridge.FIELD_OP + "\":\"" + JRosbridge.OP_CODE_PUBLISH + "\",\""
+                    + JRosbridge.FIELD_TOPIC + "\":\"myTopic1\",\""
+                    + JRosbridge.FIELD_MESSAGE + "\":{\"test1\":\"test2\"}}"
         )
         while (DummyHandler.latest == null) Thread.yield()
         assertNotNull(DummyHandler.latest)
@@ -145,8 +159,8 @@ class TestTopic {
     }
 
     @Test
-    fun testUnsubscribeNoSubscribe() = runTest{
-        t1.unsubscribe ("cb1")
+    fun testUnsubscribeNoSubscribe() = runTest {
+        t1.unsubscribe("cb1")
         assertNull(DummyHandler.latest)
         assertFalse(t1.isAdvertised)
         assertFalse(t1.isSubscribed)
@@ -180,16 +194,16 @@ class TestTopic {
         assertFalse(t1.isAdvertised)
         assertFalse(t1.isSubscribed)
     }
-    
+
     @Test
-    fun testImpl() = runTest{
+    fun testImpl() = runTest {
         val t1 = Topic(ros, "ServiceName", "MyType1", MyType1::class)
         t1.publishGeneric(MyType1("p1"))
     }
 
 
     @Test
-    fun testPublish() = runTest{
+    fun testPublish() = runTest {
         t1.advertise()
         while (DummyHandler.latest == null) Thread.yield()
         DummyHandler.latest = null
@@ -207,8 +221,13 @@ class TestTopic {
     @Test
     fun testOnMessagePngData() = runTest {
         assertTrue(ros.connect())
-        var latestMessage : Message? = null
-        t5.subscribeGeneric (this) { msg, _ -> latestMessage = msg }
+        var latestMessage: Message? = null
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage = pair?.first }
+
+            }
+        }
         while (DummyHandler.latest == null) Thread.yield()
         DummyHandler.latest = null
         assertNull(latestMessage)
@@ -242,12 +261,22 @@ class TestTopic {
     @Test
     fun testOnMessageMultiTopicCallbacks() = runTest {
         assertTrue(ros.connect())
-        var latestMessage1 : Message? = null
-        var latestMessage2 : Message? = null
-        t1.subscribeGeneric ("cb1") { msg, _ -> latestMessage1 = msg }
+        var latestMessage1: Message? = null
+        var latestMessage2: Message? = null
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage1 = pair?.first }
+
+            }
+        }
         while (DummyHandler.latest == null) Thread.yield()
         DummyHandler.latest = null
-        t1.subscribeGeneric ("cb2") { msg, _ -> latestMessage2 = msg }
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage2 = pair?.first }
+
+            }
+        }
         assertNull(latestMessage1)
         assertNull(latestMessage2)
         ros!!.onMessage(
@@ -267,12 +296,22 @@ class TestTopic {
     @Test
     fun testDeregisterTopicCallback() = runTest {
         assertTrue(ros.connect())
-        var latestMessage1 : Message? = null
-        var latestMessage2 : Message? = null
-        t1.subscribeGeneric ("cb1") { msg, _ -> latestMessage1 = msg }
+        var latestMessage1: Message? = null
+        var latestMessage2: Message? = null
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage1 = pair?.first }
+
+            }
+        }
         while (DummyHandler.latest == null) Thread.yield()
         DummyHandler.latest = null
-        t1.subscribeGeneric ("cb2") { msg, _ -> latestMessage2 = msg }
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage2 = pair?.first }
+
+            }
+        }
         assertNull(latestMessage1)
         assertNull(latestMessage2)
         t1.unsubscribe("cb1")
@@ -293,12 +332,22 @@ class TestTopic {
     @Test
     fun testDeregisterTopicCallbackAll() = runTest {
         assertTrue(ros.connect())
-        var latestMessage1 : Message? = null
-        var latestMessage2 : Message? = null
-        t1.subscribeGeneric ("cb1") { msg, _ -> latestMessage1 = msg }
+        var latestMessage1: Message? = null
+        var latestMessage2: Message? = null
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage1 = pair?.first }
+
+            }
+        }
         while (DummyHandler.latest == null) Thread.yield()
         DummyHandler.latest = null
-        t1.subscribeGeneric ("cb2") { msg, _ -> latestMessage2 = msg }
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage2 = pair?.first }
+
+            }
+        }
         assertNull(latestMessage1)
         assertNull(latestMessage2)
         t1.unsubscribe("cb1")
@@ -321,12 +370,22 @@ class TestTopic {
     @Test
     fun testDeregisterTopicCallbackInvalidTopic() = runTest {
         assertTrue(ros.connect())
-        var latestMessage1 : Message? = null
-        var latestMessage2 : Message? = null
-        t1.subscribeGeneric ("cb1") { msg, _ -> latestMessage1 = msg }
+        var latestMessage1: Message? = null
+        var latestMessage2: Message? = null
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage1 = pair?.first }
+
+            }
+        }
         while (DummyHandler.latest == null) Thread.yield()
         DummyHandler.latest = null
-        t1.subscribeGeneric ("cb2") { msg, _ -> latestMessage2 = msg }
+        coroutineScope {
+            launch {
+                t1.subscribeGeneric(this).collect { pair -> latestMessage2 = pair?.first }
+
+            }
+        }
         assertNull(latestMessage1)
         assertNull(latestMessage2)
         t1.unsubscribe("cb3")

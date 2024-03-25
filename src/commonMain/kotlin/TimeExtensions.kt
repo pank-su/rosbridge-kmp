@@ -8,11 +8,11 @@ import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 fun Time.toInstant(): Instant {
-    return Instant.fromEpochSeconds(this.secs.toLong(), this.nsecs.toLong())
+    return Instant.fromEpochSeconds(this.sec.toLong(), this.nanosec)
 }
 
 fun Time.Companion.fromInstant(instant: Instant): Time {
-    return Time(instant.epochSeconds.toInt(), instant.nanosecondsOfSecond)
+    return Time((instant.epochSeconds - instant.nanosecondsOfSecond / 1_000_000_000).toInt(), instant.nanosecondsOfSecond.toLong())
 }
 
 fun Time.Companion.now(): Time {
@@ -20,12 +20,12 @@ fun Time.Companion.now(): Time {
 }
 
 fun Duration.toDuration(): kotlin.time.Duration {
-    return this.secs.seconds + this.nsecs.nanoseconds
+    return sec.seconds + nanosec.nanoseconds
 }
 
 fun Duration.Companion.fromDuration(duration: kotlin.time.Duration): Duration {
     return Duration(
         duration.inWholeSeconds.toInt(),
-        (duration.inWholeNanoseconds - duration.inWholeSeconds * 1_000_000_000).toInt()
+        (duration.inWholeNanoseconds - duration.inWholeSeconds * 1_000_000_000)
     )
 }

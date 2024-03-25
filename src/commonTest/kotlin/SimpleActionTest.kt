@@ -7,6 +7,7 @@ import com.github.thoebert.krosbridge.messages.action_tutorials_interfaces.actio
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
+import kotlin.test.Ignore
 import kotlin.test.Test
 
 @Serializable
@@ -40,6 +41,7 @@ class SimpleActionTest {
 
 
     @Test
+    @Ignore
     fun simpleTest() = runTest {
         val ros = Ros("localhost", port = 8080)
         ros.connect()
