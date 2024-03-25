@@ -2,15 +2,18 @@ package com.github.thoebert.krosbridge.topic
 
 import com.github.thoebert.krosbridge.Ros
 import com.github.thoebert.krosbridge.rosmessages.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.reflect.KClass
 
 
-typealias TopicSubscriber = (Message, String?) -> Unit
+typealias TopicSubscriber = MutableStateFlow<Pair<Message, String?>>
 
 /**
  * The Topic object is responsible for publishing and/or subscribing to a topic
  * in ROS.
- * 
+ *
  * @param ros The ROS connection handle for this topic.
  * @param name The name of this topic.
  * @param type The message type of this topic.
@@ -53,7 +56,7 @@ open class Topic(
     val isSubscribed: Boolean
         get() = subscriptionID != null
 
-    private val subscribers = mutableMapOf<Any, TopicSubscriber>()
+    private val subscribers = mutableMapOf<Any, MutableStateFlow<Pair<Message, String?>?>>()
 
     private var subscriptionID: String? = null
     private var advertiseID: String? = null
@@ -67,20 +70,20 @@ open class Topic(
      * The callback that will be called when incoming messages are
      * received.
      */
-    suspend fun subscribeGeneric(handle : Any, callback: TopicSubscriber) : Boolean {
-        if (handle in subscribers) return false
+    suspend fun subscribeGeneric(handle: Any): StateFlow<Pair<Message, String?>?> {
+        if (handle in subscribers) return subscribers[handle]!!.asStateFlow()
         if (subscribers.isEmpty()) startSubscription()
-        subscribers[handle] = callback
-        return true
+        subscribers[handle] = MutableStateFlow(null)
+        return subscribers[handle]!!.asStateFlow()
     }
 
-    private suspend fun startSubscription(){
+    private suspend fun startSubscription() {
         ros.registerTopic(this)
         subscriptionID = "subscribe:" + name + ":" + ros.nextId()
         ros.send(Subscribe(name, subscriptionID, type, throttleRate, null, null, compression.toString()))
     }
 
-    private suspend fun endSubscription(){
+    private suspend fun endSubscription() {
         ros.deregisterTopic(this)
         ros.send(Unsubscribe(name, subscriptionID))
         subscriptionID = null
@@ -90,15 +93,15 @@ open class Topic(
      * Unregisters as a subscriber for the topic. Unsubscribing will remove all
      * the associated subscribe callbacks.
      */
-    suspend fun unsubscribe(handle : Any): Boolean {
+    suspend fun unsubscribe(handle: Any): Boolean {
         if (handle !in subscribers) return false
         this.subscribers.remove(handle)
         if (subscribers.isEmpty()) endSubscription()
         return true
     }
 
-    internal fun receivedMessage(message : Message, id : String?){
-        subscribers.forEach { (_, callback) -> callback(message, id) }
+    internal fun receivedMessage(message: Message, id: String?) {
+        subscribers.forEach { (_, state) -> state.value = message to id }
     }
 
     /**

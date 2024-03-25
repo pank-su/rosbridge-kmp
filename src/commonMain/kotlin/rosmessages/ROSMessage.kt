@@ -1,6 +1,7 @@
 package com.github.thoebert.krosbridge.rosmessages
 
 
+import com.github.thoebert.krosbridge.utils.IntOrStringSerializer
 import kotlinx.serialization.Serializable
 
 
@@ -11,5 +12,6 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 sealed class ROSMessage(val op: String) {
+    @Serializable(with = IntOrStringSerializer::class)
     abstract val id: String?
 }

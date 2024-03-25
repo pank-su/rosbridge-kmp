@@ -62,6 +62,8 @@ class Ros(
 
     private val actionNames: MutableMap<String, Action> = HashMap()
 
+    private val fragments: MutableMap<String, MutableList<Fragmentation>> = HashMap()
+
 
     private val logger = Napier.apply { base(DebugAntilog()) }
 
@@ -157,7 +159,8 @@ class Ros(
     val uRL: String
         get() = "$protocol://$hostname:$port"
 
-    fun topicByName(topicName: String): Topic? {
+
+    private fun topicByName(topicName: String): Topic? {
         val topic = topicNames[topicName]
         return if (topic != null) {
             topic
@@ -167,7 +170,7 @@ class Ros(
         }
     }
 
-    fun serviceByName(serviceName: String): Service? {
+    private fun serviceByName(serviceName: String): Service? {
         val service = serviceNames[serviceName]
         return if (service != null) {
             service
@@ -177,7 +180,7 @@ class Ros(
         }
     }
 
-    fun actionByName(actionName: String): Action? {
+    private fun actionByName(actionName: String): Action? {
         val action = actionNames[actionName]
         return if (action != null) {
             action
@@ -192,58 +195,46 @@ class Ros(
 
         var serializer: DeserializationStrategy<T>? = null
 
-        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<out T> {
+        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<T> {
             if (serializer == null) throw IllegalArgumentException("No valid serialization type existing")
             return serializer!!
         }
     }
 
-    internal val actionSendGoalSerializer =
-        ActionSendGoalSerializer() // object : GuidedSerializer<ActionGoal>(ActionGoal::class){}
-    internal val actionFeedbackSerializer = ActionFeedbackSerializer()
-    internal val actionResultSerializer = ActionResultSerializer()
 
-    internal val serviceRequestSerializer = ServiceRequestSerializer()
+    object ActionSendGoalSerializer : GuidedSerializer<ActionGoal>(ActionGoal::class)
+    object ActionFeedbackSerializer : GuidedSerializer<ActionFeedback>(ActionFeedback::class)
 
-    internal val serviceResponseSerializer = ServiceResponseSerializer()
-
-    internal val messageSerializer = MessageSerializer()
-
-
-
-    internal class ActionSendGoalSerializer : GuidedSerializer<ActionGoal>(ActionGoal::class)
-    internal class ActionFeedbackSerializer : GuidedSerializer<ActionFeedback>(ActionFeedback::class)
-
-    internal class ActionResultSerializer : GuidedSerializer<ActionResult>(ActionResult::class)
-    internal class ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
-    internal class ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
-    internal  class MessageSerializer : GuidedSerializer<Message>(Message::class)
+    object ActionResultSerializer : GuidedSerializer<ActionResult>(ActionResult::class)
+    object ServiceRequestSerializer : GuidedSerializer<ServiceRequest>(ServiceRequest::class)
+    object ServiceResponseSerializer : GuidedSerializer<ServiceResponse>(ServiceResponse::class)
+    object MessageSerializer : GuidedSerializer<Message>(Message::class)
 
     private fun getField(content: JsonElement, field: String): String? {
         return content.jsonObject[field]?.jsonPrimitive?.content
     }
 
+
     @OptIn(InternalSerializationApi::class)
     override fun selectDeserializer(content: JsonElement): KSerializer<out ROSMessage> {
         val op = getField(content, "op")
-        println(content)
         when (op) {
             Publish.OPERATION -> {
                 getField(content, "topic")?.let { topicName ->
-                    topicByName(topicName)?.let { messageSerializer.serializer = it.clz.serializer() }
+                    topicByName(topicName)?.let { MessageSerializer.serializer = it.clz.serializer() }
                 }
             }
 
             CallService.OPERATION -> {
                 getField(content, "service")?.let { serviceName ->
-                    serviceByName(serviceName)?.let { serviceRequestSerializer.serializer = it.requestClz.serializer() }
+                    serviceByName(serviceName)?.let { ServiceRequestSerializer.serializer = it.requestClz.serializer() }
                 }
             }
 
             ResponseService.OPERATION -> {
                 getField(content, "service")?.let { serviceName ->
                     serviceByName(serviceName)?.let {
-                        serviceResponseSerializer.serializer = it.responseClz.serializer()
+                        ServiceResponseSerializer.serializer = it.responseClz.serializer()
                     }
                 }
             }
@@ -251,7 +242,7 @@ class Ros(
             FeedbackAction.OPERATION -> {
                 getField(content, "action")?.let { actionName ->
                     actionByName(actionName)?.let {
-                        actionFeedbackSerializer.serializer = it.feedbackClz.serializer()
+                        ActionFeedbackSerializer.serializer = it.feedbackClz.serializer()
                     }
                 }
             }
@@ -259,7 +250,7 @@ class Ros(
             ResultAction.OPERATION -> {
                 getField(content, "action")?.let { actionName ->
                     actionByName(actionName)?.let {
-                        actionResultSerializer.serializer = it.resultClz.serializer()
+                        ActionResultSerializer.serializer = it.resultClz.serializer()
                     }
                 }
             }
@@ -267,7 +258,7 @@ class Ros(
             SendActionGoal.OPERATION -> {
                 getField(content, "action")?.let { actionName ->
                     actionByName(actionName)?.let {
-                        actionSendGoalSerializer.serializer = it.goalClz.serializer()
+                        ActionSendGoalSerializer.serializer = it.goalClz.serializer()
                     }
                 }
             }
@@ -295,6 +286,8 @@ class Ros(
     }
 
 
+    private val json = Json { ignoreUnknownKeys = true }
+
     /**
      * This method is called once an entire message has been read in by the
      * connection from rosbridge. It will parse the incoming JSON and attempt to
@@ -309,7 +302,7 @@ class Ros(
         if (message.isEmpty()) return
         try {
             logger.d("Received message $message")
-            val rosmsg = Json.decodeFromString(this, message)
+            val rosmsg = json.decodeFromString(this, message)
 
             if (rosmsg is PNGCompression) {
                 val data: String = rosmsg.data
@@ -379,9 +372,21 @@ class Ros(
             is SendActionGoal ->
                 actionByName(rosmsg.action)?.receivedGoal(rosmsg.args, rosmsg.feedback, rosmsg.id)
 
+            is Fragmentation -> onHandleFragment(rosmsg)
+
+
             else ->
                 logger.e("Unrecognized op code: $rosmsg")
         }
+    }
+
+    private fun onHandleFragment(fragment: Fragmentation) {
+        if (fragments[fragment.id] == null) fragments[fragment.id] = mutableListOf()
+        fragments[fragment.id]?.add(fragment)
+        if (fragments[fragment.id]?.size != fragment?.total?.toInt())
+            return
+        onMessage(fragments[fragment.id]?.sortedBy { it.num }?.joinToString("") { it.data }!!)
+        fragments[fragment.id]?.clear()
     }
 
     /**
