@@ -1,5 +1,5 @@
 
-rootProject.name = "krosbridge"
+rootProject.name = "rosbridge-kmp"
 
 
 pluginManagement {

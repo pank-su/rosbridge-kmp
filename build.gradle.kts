@@ -8,7 +8,7 @@ plugins {
     `maven-publish`
 }
 
-group = "io.github.thoebert"
+group = "su.pank"
 version = "1.0.6"
 
 val osName = System.getProperty("os.name")
